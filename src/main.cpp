@@ -34,7 +34,7 @@ unsigned long boot_timestamp = 0;
 // TODO: Load from LittleFS
 // For testing, set your wallet here or leave empty
 const char* HARDCODED_WALLET = "0x964b32cef544001d6DB8F585B708A5A62da308eD";
-const char* HARDCODED_FULLNODE = "http://167.99.8.29:8080";
+const char* HARDCODED_FULLNODE = "https://api.lindblad.io";
 
 // ==========================================
 // FORWARD DECLARATIONS
