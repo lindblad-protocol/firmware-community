@@ -1,0 +1,28 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+.vscode/
+.clang_complete
+.gcc-flags.json
+
+# macOS
+.DS_Store
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Build outputs
+*.bin
+*.elf
+*.hex
+*.map
+
+# Logs
+*.log
+
+# Local config
+.env.local
+.env
