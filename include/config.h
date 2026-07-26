@@ -12,7 +12,7 @@
 // ==========================================
 
 #define LINDBLAD_FIRMWARE_TYPE "A"
-#define LINDBLAD_FIRMWARE_VERSION "0.1.0"
+#define LINDBLAD_FIRMWARE_VERSION "0.2.2"
 #define LINDBLAD_PROTOCOL_VERSION 1
 
 // ==========================================

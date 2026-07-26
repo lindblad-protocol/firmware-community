@@ -2,7 +2,7 @@
 
 Open source firmware for community-driven PYCO mining on the Lindblad Protocol network.
 
-**Version:** 0.1.0 (Development)
+**Version:** 0.2.2
 **License:** MIT
 **Target:** ESP32-S3 (and compatible boards)
 
@@ -128,13 +128,30 @@ See `docs/ARCHITECTURE.md` for detailed design.
 
 ### Community Mining Rewards
 
-- **Total pool:** 30,000,000 PYCO (30% of total supply)
-- **Distribution period:** ~10 years with halving every 2 years
-- **Emission model:** Proof of Coherence based
+- **Reward per proof:** 0.01 PYCO
+- **Rate:** 1 proof per device every 60 seconds (rate-limited)
+- **Daily maximum:** ~14.4 PYCO per device
+- **Monthly maximum:** ~432 PYCO per device
+- **Yearly maximum:** ~5,256 PYCO per device
+
+### Total Pool
+
+- **Total allocated:** 30,000,000 PYCO (30% of total supply)
+- **Emission model:** SHA-256 Proof of Work (difficulty 4)
+- **Halving schedule:** Every 2 years (planned, not yet active)
 
 ### Expected Returns
 
-Realistic scenarios depend on PYCO market value. See main protocol documentation for detailed economic analysis.
+Depends on PYCO market value. Illustrative scenarios:
+
+| PYCO price | Daily | Monthly | Yearly |
+|------------|-------|---------|--------|
+| USD 0.10   | USD 1.44 | USD 43 | USD 526 |
+| USD 1.00   | USD 14.40 | USD 432 | USD 5,256 |
+| USD 10.00  | USD 144 | USD 4,320 | USD 52,560 |
+
+**Hardware cost:** USD 20-50 (ESP32-S3 board)
+**Electricity:** ~USD 2-5/month
 
 **Important:** Community mining rewards are subject to network conditions and PYCO market dynamics. This firmware makes no guarantees regarding returns.
 
@@ -210,7 +227,7 @@ See `CONTRIBUTING.md` for detailed guidelines.
 
 ## Roadmap
 
-### v0.1.0 (Current) — Boot & Configuration
+### v0.2.2 (Current) — Boot & Configuration
 - ✅ Project structure
 - ✅ WiFi setup via WiFiManager
 - ✅ Basic HTTP configuration

@@ -4,7 +4,7 @@
  * Adapted for real LindFullnode protocol:
  * - Fetches block from /block/latest
  * - Submits proofs to /api/v1/community-mining/submit
- * - Rewards: 0.001 PYCO per valid proof
+ * - Rewards: 0.01 PYCO per valid proof (backend-defined, ~14 PYCO/day)
  * - Rate limit: 60 seconds between proofs per device
  */
 
