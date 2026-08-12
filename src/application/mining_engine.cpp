@@ -220,7 +220,8 @@ static void state_mining() {
     }
 
     for (uint32_t i = 0; i < HASHES_PER_TICK; i++) {
-        String input = s_current_block_hash + s_wallet + String(s_current_nonce);
+        // Include device_id to make proofs unique per node (prevents duplicate_proof)
+        String input = s_current_block_hash + s_device_id + s_wallet + String(s_current_nonce);
 
         String hash;
         if (!sha256_hex(input, hash)) {
