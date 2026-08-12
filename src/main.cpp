@@ -11,9 +11,12 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 
 #include "config.h"
 #include "application/mining_engine.h"
+#include "crypto/puf.h"
 
 // ==========================================
 // GLOBAL STATE
@@ -24,6 +27,7 @@ const char* FIRMWARE_VERSION_STR = "0.2.0";
 const char* FIRMWARE_TYPE_STR = "A";
 
 String device_id = "";
+String puf_hex = "";
 String wallet_address = "";
 String fullnode_url = "";
 bool is_configured = false;
@@ -50,6 +54,71 @@ void handle_serial_commands();
 // ==========================================
 // SETUP
 // ==========================================
+
+
+// ============================================
+// Pairing Code Generation & Upload
+// ============================================
+static String g_pairing_code = "";
+
+String generate_pairing_code() {
+    String code = "";
+    const char* chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    for (int i = 0; i < 6; i++) {
+        code += chars[esp_random() % 36];
+    }
+    return code;
+}
+
+void upload_pairing_code() {
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[PAIR] No WiFi, skip pairing upload");
+        return;
+    }
+
+    // Generate pairing code
+    g_pairing_code = generate_pairing_code();
+
+    // Build URL
+    String url = "https://api.lindblad.io/upload-pairing";
+
+    // Build JSON payload
+    StaticJsonDocument<256> payload;
+    payload["nodeId"] = device_id;
+    payload["code"] = g_pairing_code;
+    payload["puf"] = device_id; // Firmware A uses device_id as identifier
+
+    String body;
+    serializeJson(payload, body);
+
+    WiFiClientSecure client;
+    client.setInsecure();
+
+    HTTPClient http;
+    http.begin(client, url);
+    http.addHeader("Content-Type", "application/json");
+    http.setTimeout(10000);
+
+    int code = http.POST(body);
+
+    if (code >= 200 && code < 300) {
+        Serial.println();
+        Serial.println("=====================================");
+        Serial.println("  PAIRING CODE (share with owner)");
+        Serial.println("=====================================");
+        Serial.print("  Code: ");
+        Serial.println(g_pairing_code);
+        Serial.print("  Node: ");
+        Serial.println(device_id);
+        Serial.println("=====================================");
+        Serial.println();
+    } else {
+        Serial.printf("[PAIR] Upload failed: HTTP %d\n", code);
+    }
+
+    http.end();
+}
+
 
 void setup() {
     Serial.begin(115200);
@@ -157,11 +226,31 @@ void print_banner() {
 }
 
 void generate_device_id() {
-    uint64_t chip_id = ESP.getEfuseMac();
-    char buffer[16];
-    snprintf(buffer, sizeof(buffer), "LD-%08X",
-             (uint32_t)(chip_id >> 24));
-    device_id = String(buffer);
+    // Extract silicon PUF identity (real hardware fingerprint)
+    // Falls back to MAC-based ID if PUF not yet enrolled (first boot)
+    char node_id_buf[NODE_ID_LEN];
+    char puf_hex_buf[PUF_HEX_LEN];
+    
+    bool puf_ready = puf_extract(node_id_buf, puf_hex_buf);
+    
+    if (puf_ready) {
+        // PUF successfully reconstructed - use silicon identity
+        device_id = String(node_id_buf);
+        puf_hex = String(puf_hex_buf);
+        Serial.print("[PUF] Silicon identity: ");
+        Serial.println(device_id);
+    } else {
+        // PUF still enrolling - use temporary MAC-based ID
+        // User needs to power-cycle 12 times to complete enrollment
+        uint64_t chip_id = ESP.getEfuseMac();
+        char buffer[16];
+        snprintf(buffer, sizeof(buffer), "LD-%08X", (uint32_t)(chip_id >> 24));
+        device_id = String(buffer);
+        puf_hex = device_id; // Fallback
+        Serial.println("[PUF] Enrollment in progress. Power-cycle 12 times.");
+        Serial.print("[PUF] Temporary ID: ");
+        Serial.println(device_id);
+    }
 }
 
 void setup_wifi() {
@@ -171,6 +260,23 @@ void setup_wifi() {
 
     Serial.print("[WIFI] Starting WiFiManager. AP: ");
     Serial.println(ap_name);
+
+    // Custom captive portal HTML with redirect to LindWallet after save
+    // The redirect URL includes nodeId + pufHex so LindWallet can auto-pair
+    static String redirect_url;
+    redirect_url = "https://api.lindblad.io/wallet?node=" + device_id + "&puf=" + puf_hex;
+    
+    String custom_html = "<script>setTimeout(function(){window.location.href='" + redirect_url + "';},3000);</script>";
+    custom_html += "<div style='text-align:center;padding:20px'><h2>Node connected!</h2>";
+    custom_html += "<p>Redirecting to LindWallet in 3 seconds...</p>";
+    custom_html += "<p style='font-size:12px;color:#666'>If not redirected, open:<br><a href='" + redirect_url + "'>" + redirect_url + "</a></p></div>";
+    
+    wm.setCustomHeadElement(custom_html.c_str());
+    
+    // Callback: when WiFi credentials are saved
+    wm.setSaveConfigCallback([]() {
+        Serial.println("[WIFI] WiFi credentials saved by user");
+    });
 
     bool connected = wm.autoConnect(ap_name.c_str());
 
@@ -200,6 +306,9 @@ void load_config() {
         Serial.println(wallet_address);
         Serial.print("[CONFIG] Fullnode: ");
         Serial.println(fullnode_url);
+        
+        // Generate and upload pairing code
+        upload_pairing_code();
     } else {
         is_configured = false;
         Serial.println("[CONFIG] Incomplete configuration");
