@@ -23,7 +23,7 @@
 // ==========================================
 
 const char* FIRMWARE_NAME = "Lindblad Community Miner";
-const char* FIRMWARE_VERSION_STR = "0.2.0";
+const char* FIRMWARE_VERSION_STR = "0.2.1";
 const char* FIRMWARE_TYPE_STR = "A";
 
 String device_id = "";
@@ -166,7 +166,40 @@ void setup() {
 void loop() {
     static unsigned long last_heartbeat = 0;
     static unsigned long last_stats_print = 0;
+    static unsigned long last_wifi_check = 0;
+    static unsigned long last_successful_proof = 0;
+    static unsigned long wifi_disconnected_since = 0;
     unsigned long now = millis();
+
+    // ── WiFi Watchdog: check every 30s ──
+    if (now - last_wifi_check >= 30000) {
+        last_wifi_check = now;
+        if (WiFi.status() != WL_CONNECTED) {
+            if (wifi_disconnected_since == 0) {
+                wifi_disconnected_since = now;
+                Serial.println("[WATCHDOG] WiFi disconnected, attempting reconnect...");
+                WiFi.reconnect();
+            } else if (now - wifi_disconnected_since >= 120000) {
+                // 2 min without WiFi -> restart
+                Serial.println("[WATCHDOG] WiFi down >2min, restarting ESP32");
+                delay(1000);
+                ESP.restart();
+            }
+        } else {
+            wifi_disconnected_since = 0;
+        }
+    }
+
+    // ── Mining Watchdog: restart if no proof in 10 minutes ──
+    MiningStats current_stats = mining_engine_get_stats();
+    if (current_stats.proofs_accepted > 0) {
+        last_successful_proof = now;
+    }
+    if (last_successful_proof > 0 && now - last_successful_proof >= 600000) {
+        Serial.println("[WATCHDOG] No proof accepted in 10min, restarting");
+        delay(1000);
+        ESP.restart();
+    }
 
     // Heartbeat every 15 seconds
     if (now - last_heartbeat >= 15000) {
@@ -261,23 +294,6 @@ void setup_wifi() {
     Serial.print("[WIFI] Starting WiFiManager. AP: ");
     Serial.println(ap_name);
 
-    // Custom captive portal HTML with redirect to LindWallet after save
-    // The redirect URL includes nodeId + pufHex so LindWallet can auto-pair
-    static String redirect_url;
-    redirect_url = "https://api.lindblad.io/wallet?node=" + device_id + "&puf=" + puf_hex;
-    
-    String custom_html = "<script>setTimeout(function(){window.location.href='" + redirect_url + "';},3000);</script>";
-    custom_html += "<div style='text-align:center;padding:20px'><h2>Node connected!</h2>";
-    custom_html += "<p>Redirecting to LindWallet in 3 seconds...</p>";
-    custom_html += "<p style='font-size:12px;color:#666'>If not redirected, open:<br><a href='" + redirect_url + "'>" + redirect_url + "</a></p></div>";
-    
-    wm.setCustomHeadElement(custom_html.c_str());
-    
-    // Callback: when WiFi credentials are saved
-    wm.setSaveConfigCallback([]() {
-        Serial.println("[WIFI] WiFi credentials saved by user");
-    });
-
     bool connected = wm.autoConnect(ap_name.c_str());
 
     if (connected) {
@@ -286,6 +302,18 @@ void setup_wifi() {
         Serial.println(WiFi.localIP());
         Serial.print("[WIFI] SSID: ");
         Serial.println(WiFi.SSID());
+        
+        // Print pairing URL for LindWallet
+        Serial.println();
+        Serial.println("=====================================");
+        Serial.println("  OPEN THIS URL ON YOUR PHONE:");
+        Serial.println("=====================================");
+        Serial.print("  https://api.lindblad.io/wallet?node=");
+        Serial.print(device_id);
+        Serial.print("&puf=");
+        Serial.println(puf_hex);
+        Serial.println("=====================================");
+        Serial.println();
     } else {
         Serial.println("[WIFI] Failed to connect. Rebooting in 5s...");
         delay(5000);
